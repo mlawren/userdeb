@@ -1,0 +1,6 @@
+_darcs
+build-stamp
+debian/
+install-stamp
+.*\.swp
+.git

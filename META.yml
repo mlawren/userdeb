@@ -1,0 +1,28 @@
+---
+abstract: 'Create custom debian package from user account'
+author: ~
+build_requires:
+  Test::More: 0.42
+distribution_type: module
+generated_by: 'Module::Install version 0.76'
+license: GPL
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: userdeb
+no_index:
+  directory:
+    - share
+    - inc
+    - t
+requires:
+  Cwd: 0
+  File::Basename: 0
+  File::Copy: 0
+  File::Glob: 0
+  File::HomeDir: 0
+  File::Path: 0
+  File::Spec: 0
+  Getopt::Std: 0
+  Sys::Hostname: 0
+version: 1.0

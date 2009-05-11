@@ -1,0 +1,18 @@
+Source: userdeb
+Section: misc
+Priority: optional
+Build-Depends: debhelper (>= 7)
+Build-Depends-Indep: perl (>= 5.6.10-12)
+Maintainer: Mark Lawrence <nomad@null.net>
+Standards-Version: 3.7.2
+Homepage: http://search.cpan.org/dist/DebUser/
+
+Package: userdeb
+Architecture: all
+Depends: ${perl:Depends}, ${misc:Depends}, dpkg-dev, ccrypt, rsync
+Description: Create Debian package from user account
+ userdeb bundles a user account (login information, home directory
+ files, and desired dependencies) into a Debian package.  This can be
+ useful for making a very complete individual backup, or as a way of
+ duplicating your personal environment across multiple machines.
+

@@ -1,0 +1,21 @@
+userdeb
+=======
+
+ userdeb bundles a user account (login information, home directory
+ files, and desired dependencies) into a Debian package. This can be
+ useful for making a very complete individual backup, or as a way of
+ duplicating your personal environment across multiple machines.
+
+INSTALLATION
+
+ This package must be build using Debian packaging tools.
+
+COPYRIGHT AND LICENCE
+
+ Copyright (C) 2009 Mark Lawrence <nomad@null.net>
+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 3 of the License, or
+ (at your option) any later version.
+

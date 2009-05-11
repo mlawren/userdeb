@@ -1,0 +1,762 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use open ':utf8';
+use Getopt::Std;
+use File::Basename;
+use File::Spec;
+use File::HomeDir;
+use File::Copy;
+use File::Path;
+use File::Glob;
+use Sys::Hostname;
+use Cwd;
+
+use constant {
+    CONFLICTS => '/usr/share/userdeb/conflicts',
+    DEPENDS   => '/usr/share/userdeb/depends',
+    MANIFEST  => '/usr/share/userdeb/manifest',
+    RULES     => '/usr/share/userdeb/rules',
+};
+
+my $VERSION = '0.1';
+my $me = basename($0);
+my %opts;
+my $user;
+my $pkg;
+my $datadir;
+my $debian;
+my $conflicts;
+my $manifest;
+my $depends;
+my $spass;
+my $gecos;
+my $shell;
+my $identity;
+my $email_address;
+my $hostname;
+my $now;
+my @sudoers;
+
+
+sub usage {
+    print STDERR "usage: $me [-dvsko] [<login>]\n";
+    exit 1;
+}
+
+
+sub init {
+    $user = shift || getpwuid($<);
+    if (!defined getpwnam($user)) {
+        print STDERR "User '$user' not found\n";
+        exit 1;
+    }
+
+    $spass     = [getpwnam($user)]->[1];
+    $shell     = [getpwnam($user)]->[8];
+    $gecos     = [getpwnam($user)]->[6] || "$user Unknown";
+    $gecos     =~ s/,+// if ($gecos =~ /,$/);
+    $identity  = $gecos;
+    $hostname  = hostname();
+    $identity  .= "  <$user\@$hostname>";
+    $pkg       = 'user-' . $user;
+    $debian    = File::Spec->catfile($pkg, 'debian');
+    $now       = qx/date -R/;
+    chomp($now);
+
+    if (-r '/etc/email-addresses') {
+        open(FH, '/etc/email-addresses') || die "open: $!"; 
+        while (my $line = <FH>) {
+            if ($line =~ /^$user:\s*(.*)\s*$/) {
+                $email_address = $1;
+            }
+        }
+    }
+
+    if (-r '/etc/sudoers') {
+        open(FH, '/etc/sudoers') || die "open: $!"; 
+        while (my $line = <FH>) {
+            if ($line =~ /^$user /) {
+                push(@sudoers, $line);
+            }
+        }
+    }
+
+    $opts{o}   = $opts{o} ? 1 : 0; # make an integer
+
+    $datadir   = File::Spec->catfile(File::HomeDir->users_data($user),
+                                     '.userdeb');
+    $conflicts = File::Spec->catfile($datadir, 'conflicts');
+    $manifest  = File::Spec->catfile($datadir, 'manifest');
+    $depends   = File::Spec->catfile($datadir, 'depends');
+
+    #
+    # Check and/or create userdeb configuration directory
+    #
+    if (! -d $datadir) {
+        print STDERR "$me: Initializing $datadir\n";
+        $opts{d} && warn "mkdir($datadir)";
+        mkdir($datadir) || die "mkdir: $!";
+    }
+
+    if (! -e $conflicts) {
+        $opts{d} && warn "copy(CONFLICTS,$conflicts)";
+        copy(CONFLICTS, $conflicts) || die "copy: $!"
+    }
+
+    if (! -e $depends) {
+        copy(DEPENDS, $depends) || die "copy: $!";
+    }
+
+    if (! -e $manifest) {
+        copy(MANIFEST, $manifest) || die "copy: $!";
+    }
+
+    if ($opts{d}) {
+        print <<EOF
+    user=$user
+    datadir=$datadir
+    spass=$spass
+    shell=$shell
+    gecos=$gecos
+    identity=$identity
+    pkg=$pkg
+    debian=$debian
+    email_address=$email_address
+    now=$now
+EOF
+    ;
+    }
+}
+
+
+sub debian_changelog {
+    my $changelog = File::Spec->catfile($debian, 'changelog');
+    $opts{d} && warn "$changelog";
+    open(FH, '>', $changelog) || die "open: $!";
+    print FH <<EOF
+$pkg (1.0) stable; urgency=low
+
+    * Package automatically created by userdeb v$VERSION.
+
+ -- $identity  $now
+EOF
+;
+    close FH;
+}
+
+
+sub debian_compat {
+    my $compat = File::Spec->catfile($debian, 'compat');
+    $opts{d} && warn "$compat";
+    open(FH, '>', $compat) || die "open: $!";
+    print FH "7\n";
+    close FH;
+}
+
+
+sub debian_control {
+    my @depends = qw/ccrypt/;
+    open(FH, '<', $depends) || die "open: $!";
+    while (my $line = <FH>) {
+        next if($line =~ /(^#)|(^\s*$)/);
+        chomp($line);
+        push(@depends, $line);
+    }
+
+    (my $sh = $shell) =~ s!.*/!!;
+    $sh = 'bash' if($sh eq 'sh');
+    my $depends_list = join(',',$sh, @depends);
+
+    my @conflicts;
+    open(FH, '<', $conflicts) || die "open: $!";
+    while (my $line = <FH>) {
+        next if($line =~ /(^#)|(^\s*$)/);
+        chomp($line);
+        push(@conflicts, $line);
+    }
+    my $conflicts_list = join(',',@conflicts);
+
+    my $control = File::Spec->catfile($debian, 'control');
+    $opts{d} && warn "$control";
+    open(FH, '>', $control) || die "open: $!";
+    print FH <<EOF
+Source: $pkg
+Section: misc
+Priority: optional
+Build-Depends: debhelper (>= 7)
+Build-Depends-Indep: perl (>= 5.8.0-7)
+Maintainer: $identity
+Standards-Version: 3.7.2
+
+Package: $pkg
+Architecture: all
+Depends: $depends_list
+Conflicts: $conflicts_list
+Description: Custom deb for user $user
+ This package creates the '$user' account with pre-existing
+ files and dependent packages. It was created automatically by
+ the 'userdeb' command for $identity.
+ .
+ Created $now on host $hostname
+
+EOF
+;
+}
+
+
+sub debian_copyright {
+    my $year = [localtime]->[5] + 1900;
+    my $copyright = File::Spec->catfile($debian, 'copyright');
+    $opts{d} && warn "$copyright";
+    open(FH, '>', $copyright) || die "open: $!";
+    print FH <<EOF
+This is the '$pkg' package.
+Copyright (C) $year $identity.
+
+Not to be modified, copied or distributed by anyone, ever.
+EOF
+;
+    close FH;
+}
+
+
+sub debian_preinst {
+    my $preinst = File::Spec->catfile($debian, $pkg.'.preinst.userdeb');
+    $opts{d} && warn "$preinst";
+    my @groups = grep(!/^$user$/, split(/\s+/, qx/groups $user/));
+
+    open(FH, '>', $preinst) || die "open: $!";
+    print FH <<EOF
+# Generated by userdeb
+case "\$1" in
+  *)
+
+    if ! getent passwd $user >/dev/null ; then
+        echo "Creating user $user"
+        useradd -m $user
+    fi
+
+    usermod -c "$gecos" $user 2> /dev/null
+    usermod -s $shell $user 2> /dev/null
+
+    # We do not create groups, but add the user to existing groups,
+    # so find out which ones exist:
+
+    groups=""
+    for group in @groups; do
+        if getent group \$group > /dev/null; then       # group exists
+            if ! groups $user | grep "\\b\$group\\b" > /dev/null; then
+                echo "Adding user $user to group \$group"
+                usermod -a -G \$group $user
+            fi
+        else
+            echo "Group \$group does not exist on this host" >&2
+        fi
+    done
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0
+EOF
+;
+    close FH;
+}
+
+
+sub debian_templates {
+    my $templates = File::Spec->catfile($debian, $pkg.'.templates');
+    $opts{d} && warn "$templates";
+    open(FH, '>', $templates) || die "open: $!";
+    print FH <<EOF
+Template: $pkg/password
+Type: password
+Default:
+Description: Enter decryption key for $pkg:
+ This package contains encrypted files which can only be unlocked with
+ a key. You can enter the key now for automatic decryption, or you can
+ run the /usr/share/$pkg/unlock command later.
+EOF
+;
+    close FH;
+}
+
+
+sub debian_config {
+    my $config = File::Spec->catfile($debian, $pkg.'.config');
+    $opts{d} && warn "$config";
+    open(FH, '>', $config) || die "open: $!";
+    print FH <<EOF
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+db_set $pkg/password false
+db_input medium $pkg/password || true
+db_go || true
+EOF
+;
+    close FH;
+}
+
+
+sub debian_postinst {
+    my $postinst = File::Spec->catfile($debian, $pkg.'.postinst.userdeb');
+    $opts{d} && warn "$postinst";
+    open(FH, '>', $postinst) || die "open: $!";
+    print FH <<EOF
+# Generated by userdeb
+. /usr/share/debconf/confmodule
+case "\$1" in
+    configure)
+
+        db_get $pkg/password
+        if [ -n "\$RET" -a "\$RET" != 'false' ]; then
+            echo "\$RET" | /usr/share/$pkg/unlock -s
+        else
+            echo "No decrypt password. Run /usr/share/$pkg/unlock manually." >&2
+        fi
+
+        for path in `dpkg -L $pkg | grep 'home/$user'`; do
+            if [ -e \$path ]; then # run idempotently
+                chown $user:$user \$path
+            fi
+        done
+
+        temp=\$(mktemp)
+        grep -v '/home' /var/lib/dpkg/info/$pkg.list > \$temp
+        chmod 644 \$temp
+        mv \$temp /var/lib/dpkg/info/$pkg.list
+
+        if [ -n "$email_address" ]; then
+            if ! grep '^$user:' /etc/email-addresses > /dev/null 2>&1; then
+                echo '$user: $email_address' >> /etc/email-addresses
+            fi
+        fi
+
+EOF
+;
+    foreach my $sudo (@sudoers) {
+        print FH <<EOF
+        if [ -r /etc/sudoers ]; then
+            temp=\$(mktemp)
+            if ! grep '$sudo' /etc/sudoers > /dev/null 2>&1; then
+                echo '$sudo' >> /etc/sudoers
+            fi
+        fi
+
+EOF
+;
+    }
+    print FH <<EOF
+        ;;
+    re-configure|abort-upgrade|abort-remove|abort-deconfigure)
+
+        ;;
+    *)
+        echo "postinst called with unknown argument \'\$1\'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+db_unregister $pkg/password
+
+exit 0
+EOF
+;
+    close FH;
+}
+
+
+sub debian_prerm {
+    my $prerm = File::Spec->catfile($debian, $pkg.'.prerm.userdeb');
+    $opts{d} && warn "$prerm";
+    open(FH, '>', $prerm) || die "open: $!";
+    print FH <<EOF
+# Automatically generated by userdeb
+case "\$1" in
+    *)
+        exit 0
+        ;;
+esac
+
+EOF
+;
+    close FH;
+}
+
+
+sub debian_postrm {
+    my $postrm = File::Spec->catfile($debian, $pkg.'.postrm.userdeb');
+    $opts{d} && warn "$postrm";
+    open(FH, '>', $postrm) || die "open: $!";
+    print FH <<EOF
+# Automatically generated by userdeb
+case "\$1" in
+    purge)
+        echo "Removing user $user" >&2
+        userdel -f -r $user
+
+        if [ -r /etc/email-addresses ]; then
+            temp=\$(mktemp)
+            if grep '^$user:' /etc/email-addresses > /dev/null 2>&1; then
+                echo "Cleaning /etc/email-addresses" >&2
+                grep -v '^$user:' /etc/email-addresses > \$temp && \
+                    cat \$temp > /etc/email-addresses
+            fi
+        fi
+
+        if [ -r /etc/sudoers ]; then
+            temp=\$(mktemp)
+            if grep '^$user ' /etc/sudoers > /dev/null 2>&1; then
+                echo "Cleaning /etc/sudoers" >&2
+                grep -v '^$user ' /etc/sudoers > \$temp && \
+                    cat \$temp > /etc/sudoers
+            fi
+        fi
+
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0
+EOF
+;
+    close FH;
+}
+
+
+sub unlock {
+    my $unlock = File::Spec->catfile($pkg, 'unlock');
+    $opts{d} && warn "$unlock";
+    open(FH, '>', $unlock) || die "open: $!";
+    print FH <<EOF
+#!/bin/sh
+
+if [ "\$1" = "-s" ]; then
+    read -s passwd
+else
+    echo -n "Enter decryption key: "
+    read -s passwd
+    echo
+fi
+
+
+function decrypt {
+    enc=\$1
+    orig=`echo "\$enc" | sed -e 's/\.gz\.cpt//'`
+    gz=`echo "\$enc" | sed -e 's/\.cpt//'`
+    echo \$passwd | ccdecrypt --tmpfiles -k - "\$enc"
+    gzip -d -f "\$gz"
+}
+
+
+while read oldsum file; do
+    enc="\$file.gz.cpt"
+    if [ -e "\$enc" ]; then       # we have something to decrypt
+        if [ -e "\$file" -a $opts{o} -ne 1 ]; then  # destination exists
+            sum=`md5sum "\$file" | sed -e 's/\\s.*//'`
+            if [ "\$sum" = "\$oldsum" ]; then   # file not modified
+                decrypt "\$enc"
+            else
+                nenc=`echo "\$enc" |sed -e 's/\.gz\.cpt/.userdeb-new\.gz\.cpt/'`
+                mv "\$enc" "\$nenc"
+                echo "\$file modified - new file extension: .userdeb-new" >&2
+                decrypt "\$nenc"
+            fi
+        else                    # no destination so decrypt unconditionally
+            decrypt "\$enc"
+        fi
+    fi
+done < /usr/share/$pkg/md5sums
+
+if [ -f /usr/share/$pkg/spass.cpt ]; then
+    spass=\$(echo \$passwd | ccat -k - /usr/share/$pkg/spass.cpt)
+    spass=\$(echo \$spass | sed -e "s/\\n//g" -e 's/\\\$/\\\\\\\$/g' \\
+        -e 's/\\\./\\\\\\\./g' -e 's!\\/!\\\\/!g')
+    perl -p -i- -e "s/^$user:.*?:/$user:\$spass:/" /etc/shadow
+fi
+
+
+EOF
+;
+    close FH;
+}
+
+
+sub source {
+    if (! -d $pkg) {
+        $opts{d} && warn "mkdir($pkg)";
+        mkdir($pkg) || die "mkdir: $!";
+    }
+    if (! -d $debian) {
+        $opts{d} && warn "mkdir($debian)";
+        mkdir($debian) || die "mkdir: $!";
+    }
+
+    my $rules = File::Spec->catfile($debian, 'rules');
+    $opts{d} && warn "copy(RULES, $rules)";
+    copy(RULES, $rules) || die "copy: $!";
+    $opts{d} && warn "chmod(755, $rules)";
+    chmod(0755,$rules);
+
+    debian_changelog;
+    debian_compat;
+    debian_control;
+    debian_copyright;
+    debian_preinst;
+    debian_templates;
+    debian_config;
+    debian_postinst;
+    debian_prerm;
+    debian_postrm;
+    unlock;
+
+    my $files = File::Spec->catfile($pkg, 'files');
+    my @files;
+
+    $opts{d} && warn "open $manifest";
+    open(FH, '<', $manifest) || die "open: $!";
+    open(FILES, '>', $files) || die "open: $!";
+    while (my $line = <FH>) {
+        next if($line =~ /(^#)|(^\s*$)/);
+        chomp($line);
+        my $glob = File::Spec->catfile(File::HomeDir->users_home($user), $line);
+        while (my $file = glob $glob) {
+            next if($file =~ /\.\.?$/);
+            print FILES $file ."\n";
+        }
+    }
+
+    close FILES;
+    close FH;
+
+    if ($spass) {
+        my $file = File::Spec->catfile($pkg, 'spass');
+        open(FH, '>', $file) || die "open: $!";
+        print FH $spass;
+        close FH;
+    }
+}
+
+
+sub build {
+    my @args = qw/-b -uc/;
+    if (@_) {
+        @args = @_;
+    }
+
+    my $cwd = cwd();
+    chdir($pkg) || die "chdir: $!";
+    $opts{d} && warn "dpkg-buildpackage @args";
+    if ($opts{v}) {
+        system("dpkg-buildpackage @args");
+    }
+    else {
+        qx/dpkg-buildpackage @args/;
+    }
+    chdir($cwd);
+    
+}
+
+
+sub cleanup {
+    rmtree($pkg);
+}
+
+
+#
+# Start of our main program
+#
+getopts('dvsko', \%opts);
+
+init(@ARGV);
+source();
+exit if($opts{s});
+build;
+cleanup() unless($opts{k});
+
+
+__END__
+
+=head1 NAME
+
+userdeb - create custom Debian package from user account
+
+=head1 SYNOPSIS
+
+  userdeb [options] [<login>]
+
+=head1 DESCRIPTION
+
+B<userdeb> bundles a user account (login information, home directory
+files, and desired dependencies) into a Debian package. This can be
+useful for making a very complete individual backup, or as a way of
+duplicating your personal environment across multiple machines.
+
+As sensitive data may be included (for example gpg/ssh keys), all files are
+encrypted inside the package. The user is prompted for a password during the
+build phase, and the same password given during package installation decrypts
+the files.
+
+The generated package can be safely removed after it is installed,
+leaving all of your files in place. Purging the package is equivalent
+to a 'userdel -f -r'.  Re-installation behavior - how to handle
+conflicts between locally modified files and new package files - is
+configurable.
+
+The root user may specify <login> to build a package for another
+user.
+
+=head2 Installation Actions
+
+The following steps take place during package installation.
+
+=over 4
+
+=item Account Creation
+
+The user account is created with the same gecos and shell as on the
+current system, but with no password (unless B<userdeb> has been run as
+root).
+
+=item Account Groups
+
+The user is added to the same groups as the current system, provided
+they already exist on the target system.
+
+=item Email Address
+
+If an entry for the user was found in /etc/email-addresses it is
+duplicated on the target system.
+
+=item Email Aliases
+
+Any entries matching the login name in /etc/aliases are duplicated on
+the target system.
+
+=item Sudoers Entry
+
+If an entry for the user was found in /etc/sudoers it is duplicated on
+the target system (only if B<userdeb> has been run as root)
+
+=item File Decryption & Replacement
+
+All files in the package are decrypted. If the '-o' option has been
+used then existing files are unconditionally overwritten. Else new
+files are named $file.userdeb-new in the event of an existing, modified
+file.
+
+=back
+
+Custom actions can also be specified (see CONFIGURATION below).
+
+=head2 Options
+
+The following command-line options are recognized by B<userdeb>.
+
+=over 4
+
+=item -d
+
+Turn on debug output during source package creation.
+
+=item -v
+
+Turn on verbose output during the package build
+
+=item -s
+
+Source only - do not build the package. You should only use this if you
+are interested in the details of how the package source is created.
+Future invocations of B<userdeb> will clobber any changes!
+
+=item -k
+
+Keep the package source around after the build phase. You should only
+use this if you are interested in the details of how the package was
+built. Future invocations of B<userdeb> will clobber any
+changes!
+
+=item -o
+
+Unconditionally overwrite existing files on the target system with new
+ones.
+
+=back
+
+Any arguments appearing after '--' will be passed directly to
+dpkg-buildpackage during the build phase. Default is '-b -uc'.
+
+=head1 CONFIGURATION
+
+Customization of the package can be made through the following
+configuration files located in ~/.userdeb/ (automatically created
+on the first run).
+
+Lines beginning with '#' and those that are empty are ignored.
+
+=over 4
+
+=item manifest
+
+The manifest file specifies which paths to include in the package. It
+contains a list of paths (one per line) relative to the users home
+directory. They are expanded using the standard 'glob' method
+allowing you to use constructs such as '.bash*'.  If a path expands to
+a directory then all files underneath are included.
+
+The default is a single '.*' - i.e. all configuration files (and
+configuration directories) under /home/<login>/ are included.
+
+To include everything in your home directory you add a line containing
+just '*'.  However, be aware that building a package requires twice the
+amount of space on the disk as the included files, so you will not be
+able to build this if your /home is on a filesystem that is more than
+one-third full.
+
+=item depends
+
+A list of package names, one per line, upon which this package will
+depend. Version information can be specified exactly the same way as
+in a debian/control file.
+
+=item conflicts
+
+A list of package names, one per line, with which this package will
+conflict. Version information can be specified exactly the same way as
+in a debian/control file.
+
+=back
+
+=head1 FILES
+
+The '/usr/share/user-<login>/unlock' script included in the new package
+is responsible for the decryption of files. It can be used in the event
+that things do not succeed during installation (wrong password,
+unattended install, etc).
+
+=head1 SEE ALSO
+
+L<dpkg-buildpackage>(1), L<equivs>(1), L<ccrypt>(1)
+
+=head1 AUTHOR
+
+Mark Lawrence E<lt>nomad@null.netE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2009 Mark Lawrence <nomad@null.net>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
+
+=cut
+
+# vim: set tabstop=4 expandtab:

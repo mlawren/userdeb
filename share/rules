@@ -1,0 +1,90 @@
+#!/usr/bin/make -f
+
+PACKAGE=$(shell dh_listpackages)
+TMP     =$(CURDIR)/debian/$(PACKAGE)
+
+
+build: build-stamp
+build-stamp:
+	dh_testdir
+
+	# Add commands to compile the package here
+	touch build-stamp
+
+clean:
+	dh_testdir
+	dh_testroot
+
+	# Add commands to clean up after the build process here
+	dh_clean build-stamp install-stamp
+	rm -f filelist
+
+install: install-stamp
+install-stamp: build-stamp
+	dh_testdir
+	dh_testroot
+	dh_prep
+
+	mkdir -p $(TMP)
+	mkdir -p $(TMP)/usr/share/$(PACKAGE)
+
+	while read path; do \
+		echo "PATH=$$path" >&2; \
+		cp -a --parents "$$path" $(TMP); \
+	done < files
+
+	find $(TMP) -type f > $(CURDIR)/filelist
+	while read file; do \
+		orig=`echo $$file | sed -e 's!$(TMP)!!'`;\
+		md5sum "$$orig" >> $(TMP)/usr/share/$(PACKAGE)/md5sums; \
+		gzip "$$file"; \
+	done < filelist
+	rm -f $(CURDIR)/filelist
+
+	if [ -e $(CURDIR)/spass ]; then \
+		cp $(CURDIR)/spass $(TMP)/usr/share/$(PACKAGE)/spass; \
+		ccencrypt --tmpfiles -r "$(TMP)/home" \
+			"$(TMP)/usr/share/$(PACKAGE)/spass"; \
+	else \
+		ccencrypt --tmpfiles -r "$(TMP)/home"; \
+	fi
+
+	cp -a $(CURDIR)/unlock $(TMP)/usr/share/$(PACKAGE)
+	chmod 755 $(TMP)/usr/share/$(PACKAGE)/unlock
+
+    # These MUST be copied in now during the build step, because
+    # they are cleaned somehow (by dh_clean?) beforehand.
+	cp $(CURDIR)/debian/$(PACKAGE).preinst.userdeb \
+		$(CURDIR)/debian/$(PACKAGE).preinst.debhelper
+
+	cp $(CURDIR)/debian/$(PACKAGE).postinst.userdeb \
+		$(CURDIR)/debian/$(PACKAGE).postinst.debhelper
+
+	cp $(CURDIR)/debian/$(PACKAGE).prerm.userdeb \
+		$(CURDIR)/debian/$(PACKAGE).prerm.debhelper
+
+	cp $(CURDIR)/debian/$(PACKAGE).postrm.userdeb \
+		$(CURDIR)/debian/$(PACKAGE).postrm.debhelper
+
+	touch install-stamp
+
+binary-arch:
+# We have nothing to do by default.
+
+binary-indep: build install
+	dh_testdir
+	dh_testroot
+	dh_installdocs debian/copyright debian/changelog
+	dh_compress
+	dh_fixperms -X/home
+	dh_installdeb
+	dh_installdebconf
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+source diff:                                                                  
+	@echo >&2 'source and diff are obsolete - use dpkg-source -b'; false
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary
