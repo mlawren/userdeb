@@ -9,10 +9,10 @@ Homepage: http://search.cpan.org/dist/DebUser/
 
 Package: userdeb
 Architecture: all
-Depends: ${perl:Depends}, ${misc:Depends}, dpkg-dev, ccrypt, rsync
-Description: Create Debian package from user account
- userdeb bundles a user account (login information, home directory
+Depends: ${perl:Depends}, ${misc:Depends}, libfile-homedir-perl, dpkg-dev, ccrypt, rsync
+Description: Create Debian package from a user account
+ Userdeb bundles a user account (login information, home directory
  files, and desired dependencies) into a Debian package.  This can be
- useful for making a very complete individual backup, or as a way of
- duplicating your personal environment across multiple machines.
+ useful as a more complete backup, or as a way of duplicating your
+ personal environment across multiple machines.
 
