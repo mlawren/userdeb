@@ -595,13 +595,13 @@ userdeb - create custom Debian package from user account
 
 B<userdeb> bundles a user account (login information, home directory
 files, and desired dependencies) into a Debian package. This can be
-useful for making a very complete individual backup, or as a way of
-duplicating your personal environment across multiple machines.
+useful as a complete backup, or as a way of duplicating your personal
+environment across multiple machines.
 
-As sensitive data may be included (for example gpg/ssh keys), all files are
-encrypted inside the package. The user is prompted for a password during the
-build phase, and the same password given during package installation decrypts
-the files.
+As sensitive data may be included (for example gpg/ssh keys), all files
+are encrypted inside the package. The user is prompted for a password
+during the build phase, and the same password given during package
+installation decrypts the files.
 
 The generated package can be safely removed after it is installed,
 leaving all of your files in place. Purging the package is equivalent
@@ -609,8 +609,6 @@ to a 'userdel -f -r'.  Re-installation behavior - how to handle
 conflicts between locally modified files and new package files - is
 configurable.
 
-The root user may specify <login> to build a package for another
-user.
 
 =head2 Installation Actions
 
@@ -621,8 +619,8 @@ The following steps take place during package installation.
 =item Account Creation
 
 The user account is created with the same gecos and shell as on the
-current system, but with no password (unless B<userdeb> has been run as
-root).
+current system. If B<userdeb> was run as root then the password is also
+set.
 
 =item Account Groups
 
@@ -642,14 +640,13 @@ the target system.
 =item Sudoers Entry
 
 If an entry for the user was found in /etc/sudoers it is duplicated on
-the target system (only if B<userdeb> has been run as root)
+the target system (only if B<userdeb> was run as root)
 
 =item File Decryption & Replacement
 
 All files in the package are decrypted. If the '-o' option has been
-used then existing files are unconditionally overwritten. Else new
-files are named $file.userdeb-new in the event of an existing, modified
-file.
+used then existing files are unconditionally overwritten. Otherwise new
+conflicting files are installed as $file.userdeb-new.
 
 =back
 
@@ -742,7 +739,7 @@ unattended install, etc).
 
 =head1 SEE ALSO
 
-L<dpkg-buildpackage>(1), L<equivs>(1), L<ccrypt>(1)
+L<dpkg-buildpackage>(1), L<ccrypt>(1)
 
 =head1 AUTHOR
 
