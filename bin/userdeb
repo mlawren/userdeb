@@ -577,19 +577,14 @@ sub source {
 
 
 sub build {
-    my @args = qw/-b -uc/;
-    if (@_) {
-        @args = @_;
-    }
-
     my $cwd = cwd();
     chdir($pkg) || die "chdir: $!";
-    debug("dpkg-buildpackage @args");
+    debug("debuild binary");
     if ($opts{v}) {
-        system("dpkg-buildpackage @args");
+        system("debuild binary");
     }
     else {
-        qx/dpkg-buildpackage @args/;
+        qx/debuild binary/;
     }
     chdir($cwd);
     
@@ -722,9 +717,6 @@ Unconditionally overwrite existing files on the target system with new
 ones.
 
 =back
-
-Any arguments appearing after '--' will be passed directly to
-dpkg-buildpackage during the build phase. Default is '-b -uc'.
 
 =head1 CONFIGURATION
 
