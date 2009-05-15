@@ -2,6 +2,7 @@
 
 PACKAGE=$(shell dh_listpackages)
 TMP     =$(CURDIR)/debian/$(PACKAGE)
+USER    =$(shell echo $(PACKAGE) | sed -e 's/user-//')
 
 
 build: build-stamp
@@ -29,27 +30,31 @@ install-stamp: build-stamp
 	mkdir -p $(TMP)/usr/share/$(PACKAGE)
 
 	while read path; do \
-		echo "PATH=$$path" >&2; \
 		cp -a --parents "$$path" $(TMP); \
 	done < files
+
+	if [ -e $(CURDIR)/crontab ]; then \
+		mkdir -p $(TMP)/var/spool/cron/crontabs; \
+		cp $(CURDIR)/crontab $(TMP)/var/spool/cron/crontabs/$(USER); \
+		chmod 600 $(TMP)/var/spool/cron/crontabs/$(USER); \
+		chown $(USER):crontab $(TMP)/var/spool/cron/crontabs/$(USER); \
+		ls -l $(TMP)/var/spool/cron/crontabs/$(USER); \
+	fi
+
 
 	find $(TMP) -type f > $(CURDIR)/filelist
 	while read file; do \
 		orig=`echo $$file | sed -e 's!$(TMP)!!'`;\
-		md5sum "$$orig" >> $(TMP)/usr/share/$(PACKAGE)/md5sums; \
+		md5sum "$$orig" >> $(CURDIR)/md5sums; \
 		gzip "$$file"; \
 	done < filelist
 	rm -f $(CURDIR)/filelist
 
-	if [ -e $(CURDIR)/spass ]; then \
-		cp $(CURDIR)/spass $(TMP)/usr/share/$(PACKAGE)/spass; \
-		ccencrypt --tmpfiles -r "$(TMP)/home" \
-			"$(TMP)/usr/share/$(PACKAGE)/spass"; \
-	else \
-		ccencrypt --tmpfiles -r "$(TMP)/home"; \
-	fi
+	ccencrypt --tmpfiles -r $$(echo $(TMP)/* | grep -v DEBIAN); \
 
-	cp -a $(CURDIR)/unlock $(TMP)/usr/share/$(PACKAGE)
+	cp $(CURDIR)/md5sums $(TMP)/usr/share/$(PACKAGE)
+	cp $(CURDIR)/unlock $(TMP)/usr/share/$(PACKAGE)
+	chmod 600 $(TMP)/usr/share/$(PACKAGE)/unlock
 	chmod 755 $(TMP)/usr/share/$(PACKAGE)/unlock
 
     # These MUST be copied in now during the build step, because
