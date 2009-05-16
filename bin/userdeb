@@ -37,6 +37,7 @@ my $email_address;
 my $hostname;
 my $now;
 my @sudoers;
+my @aliases;
 my $crontab;
 
 
@@ -106,12 +107,26 @@ sub init {
         copy(MANIFEST, $manifest) || die "copy: $!";
     }
 
+    $email_address = '';
     if (-r '/etc/email-addresses') {
         open(FH, '/etc/email-addresses') || die "open: $!"; 
         debug("/etc/email-addresses");
         while (my $line = <FH>) {
             if ($line =~ /^$user:\s*(.*)\s*$/) {
                 $email_address = $1;
+            }
+        }
+    }
+
+    if (-r '/etc/aliases') {
+        open(FH, '/etc/aliases') || die "open: $!"; 
+        debug("/etc/aliases");
+        while (my $line = <FH>) {
+            if ($line =~ /^$user:/) {
+                push(@aliases, $line);
+            }
+            elsif ($line =~ /:\s*$user\s*$/) {
+                push(@aliases, $line);
             }
         }
     }
@@ -137,6 +152,7 @@ sub init {
     pkg=$pkg
     debian=$debian
     email_address=$email_address
+    aliases=@aliases
     now=$now
 EOF
 ); 
@@ -351,10 +367,19 @@ case "\$1" in
 
 EOF
 ;
+    foreach my $alias (@aliases) {
+        print FH <<EOF
+        if ! grep '$alias' /etc/aliases > /dev/null 2>&1; then
+            echo '$alias' >> /etc/aliases
+        fi
+
+EOF
+;
+    }
+
     foreach my $sudo (@sudoers) {
         print FH <<EOF
         if [ -r /etc/sudoers ]; then
-            temp=\$(mktemp)
             if ! grep '$sudo' /etc/sudoers > /dev/null 2>&1; then
                 echo '$sudo' >> /etc/sudoers
             fi
@@ -363,6 +388,7 @@ EOF
 EOF
 ;
     }
+
     print FH <<EOF
         ;;
     re-configure|abort-upgrade|abort-remove|abort-deconfigure)
@@ -426,6 +452,14 @@ case "\$1" in
                 echo "Cleaning /etc/sudoers" >&2
                 grep -v '^$user ' /etc/sudoers > \$temp && \
                     cat \$temp > /etc/sudoers
+            fi
+        fi
+
+        if [ -r /etc/aliases ]; then
+            if grep -E '(^$user:)|(\\b$user\\s*\$)' /etc/aliases > /dev/null 2>&1; then
+                temp=\$(mktemp)
+                echo "Cleaning /etc/aliases" >&2
+                grep -E -v '(^$user:)|(\\b$user\\s*\$)' /etc/aliases > \$temp && cat \$temp > /etc/aliases
             fi
         fi
 
