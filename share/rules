@@ -25,7 +25,7 @@ install-stamp: build-stamp
 	dh_testroot
 	dh_prep
 
-	/home/mlawren/src/userdeb/share/build $(PACKAGE) $(TMP)
+	/usr/share/userdeb/build $(PACKAGE) $(TMP)
 
     # These MUST be copied in now during the build step, because
     # they are cleaned somehow (by dh_clean?) beforehand.
