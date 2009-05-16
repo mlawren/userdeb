@@ -500,8 +500,8 @@ if [ -n "$crontab" -a -e /var/spool/cron/crontabs/$user ]; then
 fi
 
 
-if [ -f /usr/share/$pkg/spass.cpt ]; then
-    spass=\$(echo \$passwd | ccat -k - /usr/share/$pkg/spass.cpt)
+if [ -f /usr/share/$pkg/spass.gz.cpt ]; then
+    spass=\$(echo \$passwd | ccat -k - /usr/share/$pkg/spass.gz.cpt | gzip -dc)
     spass=\$(echo \$spass | sed -e "s/\\n//g" -e 's/\\\$/\\\\\\\$/g' \\
         -e 's/\\\./\\\\\\\./g' -e 's!\\/!\\\\/!g')
     perl -p -i- -e "s/^$user:.*?:/$user:\$spass:/" /etc/shadow
@@ -563,7 +563,9 @@ sub source {
 
     if ($spass) {
         my $file = File::Spec->catfile($pkg, 'spass');
+        debug($file);
         open(FH, '>', $file) || die "open: $!";
+        chmod 0600, $file;
         print FH $spass;
         close FH;
     }

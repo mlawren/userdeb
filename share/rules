@@ -41,6 +41,10 @@ install-stamp: build-stamp
 		ls -l $(TMP)/var/spool/cron/crontabs/$(USER); \
 	fi
 
+	if [ -e $(CURDIR)/spass ]; then \
+		cp $(CURDIR)/spass $(TMP)/usr/share/$(PACKAGE)/spass; \
+		chmod 600 $(TMP)/usr/share/$(PACKAGE)/spass; \
+	fi
 
 	find $(TMP) -type f > $(CURDIR)/filelist
 	while read file; do \
