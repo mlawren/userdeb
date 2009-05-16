@@ -1,0 +1,92 @@
+#!/bin/sh
+set -e
+PACKAGE=$1
+TMP=$2
+user=$(echo $PACKAGE | sed -e 's/user-//')
+pass1='p1'
+pass2='p2'
+
+# some sanity checking
+
+function usage() {
+    echo "usage: $0 <package> <builddir>" >&2
+    exit 1
+}
+
+if [ -z "$PACKAGE" -o -z "$TMP" ]; then
+    usage;
+fi
+
+if [ ! -e files ]; then
+    echo "Missing 'files' file" >&2
+    exit 1
+fi
+
+
+while ! [ -n "$pass1" -a -n "$pass2" -a "$pass1" = "$pass2" ]; do
+
+    echo -n "Enter encryption key: " >&2
+    read -s pass1
+    echo >&2
+    echo -n "Enter encryption key: (repeat) " >&2
+    read -s pass2
+    echo >&2
+
+    if ! [ -n "$pass1" -a -n "$pass2" -a "$pass1" = "$pass2" ]; then
+        echo "Sorry, the keys you entered did not match." >&2
+        echo >&2
+    fi
+
+done
+
+mkdir -p $TMP
+mkdir -p $TMP/usr/share/$PACKAGE
+
+# Copy and encrypt the user files
+while read path; do 
+    cp -a --parents "$path" $TMP; 
+done < files
+
+find $TMP -type f > filelist
+while read file; do 
+    if ! echo "$file" | grep '\.gz\.cpt$' > /dev/null; then
+        md5sum "$file" | sed -e "s!$TMP!!" >> md5sums; 
+        gzip "$file"; 
+    fi
+done < filelist
+rm -f filelist
+
+echo $pass1 | ccencrypt -s -k - -r $TMP
+
+# users crontab is a special case because we want never to let an
+# unencrypted copy hit the disk, but we still want it automatically
+# decrypted.
+cront=/var/spool/cron/crontabs/$user
+if [ -f "$cront" ]; then 
+    md5sum $cront >> md5sums;
+    mkdir -p $TMP/var/spool/cron/crontabs
+    (echo $pass1; gzip -c $cront) | ccencrypt -k - \
+        > $TMP/var/spool/cron/crontabs/$user.gz.cpt;
+fi
+
+
+# Now the list of files to be decrypted is complete
+mv md5sums $TMP/usr/share/$PACKAGE
+echo $pass1 | ccencrypt -k - $TMP/usr/share/$PACKAGE/md5sums
+
+
+# Never let an unencrypted copy of the shadow password hit the disk!
+if entry=$(getent shadow $user); then 
+    shadow=$(echo $entry | awk -F ':' '{print $2}')
+    (echo $pass1; echo $shadow) | ccencrypt -k - > $TMP/usr/share/$PACKAGE/spass.cpt;
+fi
+
+# Never let an unencrypted extract from the sudoers file hit the disk
+# either!
+if grep "^$user " /etc/sudoers > /dev/null; then
+    (echo $pass1; grep "^$user " /etc/sudoers) \
+        | ccencrypt -k - > $TMP/usr/share/$PACKAGE/sudo.cpt;
+fi
+
+cp unlock $TMP/usr/share/$PACKAGE
+chmod 755 $TMP/usr/share/$PACKAGE/unlock

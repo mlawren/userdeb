@@ -2,7 +2,6 @@
 
 PACKAGE=$(shell dh_listpackages)
 TMP     =$(CURDIR)/debian/$(PACKAGE)
-USER    =$(shell echo $(PACKAGE) | sed -e 's/user-//')
 
 
 build: build-stamp
@@ -26,53 +25,20 @@ install-stamp: build-stamp
 	dh_testroot
 	dh_prep
 
-	mkdir -p $(TMP)
-	mkdir -p $(TMP)/usr/share/$(PACKAGE)
-
-	while read path; do \
-		cp -a --parents "$$path" $(TMP); \
-	done < files
-
-	if [ -e $(CURDIR)/crontab ]; then \
-		mkdir -p $(TMP)/var/spool/cron/crontabs; \
-		cp $(CURDIR)/crontab $(TMP)/var/spool/cron/crontabs/$(USER); \
-		chmod 600 $(TMP)/var/spool/cron/crontabs/$(USER); \
-		chown $(USER):crontab $(TMP)/var/spool/cron/crontabs/$(USER); \
-		ls -l $(TMP)/var/spool/cron/crontabs/$(USER); \
-	fi
-
-	if [ -e $(CURDIR)/spass ]; then \
-		cp $(CURDIR)/spass $(TMP)/usr/share/$(PACKAGE)/spass; \
-		chmod 600 $(TMP)/usr/share/$(PACKAGE)/spass; \
-	fi
-
-	find $(TMP) -type f > $(CURDIR)/filelist
-	while read file; do \
-		orig=`echo $$file | sed -e 's!$(TMP)!!'`;\
-		md5sum "$$orig" >> $(CURDIR)/md5sums; \
-		gzip "$$file"; \
-	done < filelist
-	rm -f $(CURDIR)/filelist
-
-	ccencrypt --tmpfiles -r $$(echo $(TMP)/* | grep -v DEBIAN); \
-
-	cp $(CURDIR)/md5sums $(TMP)/usr/share/$(PACKAGE)
-	cp $(CURDIR)/unlock $(TMP)/usr/share/$(PACKAGE)
-	chmod 600 $(TMP)/usr/share/$(PACKAGE)/unlock
-	chmod 755 $(TMP)/usr/share/$(PACKAGE)/unlock
+	/home/mlawren/src/userdeb/share/build $(PACKAGE) $(TMP)
 
     # These MUST be copied in now during the build step, because
     # they are cleaned somehow (by dh_clean?) beforehand.
-	cp $(CURDIR)/debian/$(PACKAGE).preinst.userdeb \
+	@cp $(CURDIR)/debian/$(PACKAGE).preinst.userdeb \
 		$(CURDIR)/debian/$(PACKAGE).preinst.debhelper
 
-	cp $(CURDIR)/debian/$(PACKAGE).postinst.userdeb \
+	@cp $(CURDIR)/debian/$(PACKAGE).postinst.userdeb \
 		$(CURDIR)/debian/$(PACKAGE).postinst.debhelper
 
-	cp $(CURDIR)/debian/$(PACKAGE).prerm.userdeb \
+	@cp $(CURDIR)/debian/$(PACKAGE).prerm.userdeb \
 		$(CURDIR)/debian/$(PACKAGE).prerm.debhelper
 
-	cp $(CURDIR)/debian/$(PACKAGE).postrm.userdeb \
+	@cp $(CURDIR)/debian/$(PACKAGE).postrm.userdeb \
 		$(CURDIR)/debian/$(PACKAGE).postrm.debhelper
 
 	touch install-stamp
