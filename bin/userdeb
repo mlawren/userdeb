@@ -40,7 +40,7 @@ my @aliases;
 
 
 sub usage {
-    print STDERR "usage: $me [-dvsko] [<login>]\n";
+    print STDERR "usage: $me [-dvsko] <login>\n";
     exit 1;
 }
 
@@ -524,7 +524,7 @@ while read oldsum file; do
             else
                 nenc=\$(echo "\$enc" | sed -e 's/\.gz\.cpt/.userdeb-new\.gz\.cpt/')
                 mv "\$enc" "\$nenc"
-                echo "\$file modified - new file extension: .userdeb-new" >&2
+                echo "\$file modified - new file has .userdeb-new extension." >&2
                 decrypt "\$nenc"
             fi
         else                    # no destination so decrypt unconditionally
@@ -629,7 +629,7 @@ userdeb - create custom Debian package from user account
 
 =head1 SYNOPSIS
 
-  userdeb [options] [<login>]
+  userdeb [options] <login>
 
 =head1 DESCRIPTION
 
@@ -639,7 +639,7 @@ useful as a complete backup, or as a way of duplicating your personal
 environment across multiple machines.
 
 As sensitive data may be included (for example gpg/ssh keys), all files
-are encrypted inside the package. The user is prompted for a password
+are encrypted inside the package. B<userdeb> prompts for a password
 during the build phase, and the same password given during package
 installation decrypts the files.
 
@@ -649,10 +649,15 @@ complete version of 'userdel -f -r'.  Re-installation behavior - how to
 handle conflicts between locally modified files and new package files -
 is configurable.
 
+A normal user account can call B<userdeb> but the resulting package
+will be missing some pieces of information which are only accessable by
+root.  You should never install a userdeb-generated package unless you
+completely trust the source.
 
 =head2 Installation Actions
 
-The following steps take place during package installation.
+The following steps take place during the installation of the generated
+package.
 
 =over 4
 
@@ -679,8 +684,8 @@ the target system.
 
 =item Sudoers Entry
 
-If an entry for the user was found in /etc/sudoers it is duplicated on
-the target system (only if B<userdeb> was run as root)
+Any entries for the user in /etc/sudoers are duplicated on the target
+system (only if B<userdeb> was run as root)
 
 =item Crontabs
 
@@ -753,7 +758,7 @@ The default is a single '.*' - i.e. all configuration files (and
 configuration directories) under /home/<login>/ are included.
 
 To include everything in your home directory you add a line containing
-just '*'.  However, be aware that building a package requires twice the
+'*'.  However, be aware that building a package requires twice the
 amount of space on the disk as the included files, so you will not be
 able to build this if your /home is on a filesystem that is more than
 one-third full.
@@ -782,7 +787,7 @@ unattended install, etc).
 
 =head1 SEE ALSO
 
-L<dpkg-buildpackage>(1), L<ccrypt>(1)
+L<debuild>(1), L<ccrypt>(1)
 
 =head1 AUTHOR
 
