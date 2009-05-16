@@ -163,9 +163,11 @@ EOF
 sub debian_changelog {
     my $changelog = File::Spec->catfile($debian, 'changelog');
     debug("$changelog");
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+    my $version = sprintf('%4d%02d%02d', $year += 1900, $mon+1,$mday);
     open(FH, '>', $changelog) || die "open: $!";
     print FH <<EOF
-$pkg (1.0) stable; urgency=low
+$pkg ($version) stable; urgency=low
 
     * Package automatically created by userdeb v$VERSION.
 
