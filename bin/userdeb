@@ -626,7 +626,7 @@ __END__
 
 =head1 NAME
 
-userdeb - create custom Debian package from user account
+userdeb - pack a user account into a Debian package
 
 =head1 SYNOPSIS
 
@@ -654,6 +654,10 @@ A normal user account can call B<userdeb> but the resulting package
 will be missing some pieces of information which are only accessable by
 root.  You should never install a userdeb-generated package unless you
 completely trust the source.
+
+In addition to the packages defined in the 'depends' file (see
+CONFIGURATION below), any B<userdeb>-generated package requires the
+'ccrypt' package to be installed.
 
 =head2 Installation Actions
 
