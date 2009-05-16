@@ -371,7 +371,8 @@ EOF
         if [ -n "\$RET" -a "\$RET" != 'false' ]; then
             echo "\$RET" | /usr/share/$pkg/unlock -s
         else
-            echo "No decrypt password. Run /usr/share/$pkg/unlock manually." >&2
+            echo "No decryption key available." >&2
+            echo "Run /usr/share/$pkg/unlock manually." >&2
         fi
 
         ;;
